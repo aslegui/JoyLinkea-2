@@ -1,0 +1,10 @@
+{
+  "server": {"bind":"0.0.0.0","port":5182},
+  "players":{"max":4},
+  "network":{"heartbeatIntervalMs":1000,"heartbeatTimeoutMs":3500,"reconnectGraceMs":20000,"maxMessageBytes":4096,"maxMessagesPerSecond":180},
+  "input":{"sendRateHz":45,"stateTimeoutMs":300,"deadzone":0.12},
+  "latency":{"sampleIntervalMs":3000},
+  "motion":{"enabled":true},
+  "logging":{"level":"INFO"},
+  "bridge":{"commandTimeoutMs":1500,"watchdogMs":3000,"mode":"fake"}
+}

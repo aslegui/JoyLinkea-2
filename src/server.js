@@ -1,0 +1,23 @@
+import http from 'node:http';
+import os from 'node:os';
+import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {dirname,resolve,extname,normalize} from 'node:path';
+import {WebSocketServer} from 'ws';
+import {loadConfig} from './config.js';
+import {BridgeClient} from './bridge-client.js';
+import {Core} from './core.js';
+import {parseClientMessage} from './protocol.js';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');const config=loadConfig();
+const sockets=new Set();const hosts=new Set();let closing=false;let timer;
+const bridge=new BridgeClient({timeoutMs:config.bridge.commandTimeoutMs,watchdogMs:config.bridge.watchdogMs,mode:config.bridge.mode,onExit:()=>core.bridgeExit()});
+const core=new Core(config,bridge,snapshot=>{const message=JSON.stringify({type:'HOST_STATE',...snapshot});for(const ws of hosts)if(ws.readyState===1&&ws.bufferedAmount<65536)ws.send(message)});
+function localUrls(port){return Object.values(os.networkInterfaces()).flat().filter(x=>x&&x.family==='IPv4'&&!x.internal).map(x=>`http://${x.address}:${port}/control`)}
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/health'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({ok:true,bridgeReady:core.bridgeReady,mode:config.bridge.mode}));return}const files={'/':'host.html','/control':'control.html','/host.js':'host.js','/control.js':'control.js','/styles.css':'styles.css'};const file=files[url.pathname];if(!file){res.writeHead(404);res.end();return}const data=await readFile(resolve(root,'public',file));const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};res.writeHead(200,{'content-type':mime[extname(file)],'cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; connect-src 'self' ws:; script-src 'self'; style-src 'self'"});res.end(data)}catch{res.writeHead(500);res.end()}});
+const wss=new WebSocketServer({noServer:true,maxPayload:config.network.maxMessageBytes});
+server.on('upgrade',(req,socket,head)=>{const url=new URL(req.url,'http://localhost');if(!['/ws','/host-ws'].includes(url.pathname)||req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host){socket.destroy();return}wss.handleUpgrade(req,socket,head,ws=>{ws.isHost=url.pathname==='/host-ws'&&isLocal(req.socket.remoteAddress);wss.emit('connection',ws,req)})});
+function isLocal(a){return a==='127.0.0.1'||a==='::1'||a==='::ffff:127.0.0.1'}
+wss.on('connection',ws=>{sockets.add(ws);if(ws.isHost){hosts.add(ws);ws.send(JSON.stringify({type:'HOST_INFO',urls:localUrls(server.address().port),port:server.address().port,mode:config.bridge.mode}));core.emit()}let count=0,windowAt=performance.now(),hello=false;ws.on('message',async raw=>{try{const t=performance.now();if(t-windowAt>1000){count=0;windowAt=t}if(++count>config.network.maxMessagesPerSecond)throw Error('RATE_LIMIT');const m=parseClientMessage(raw,config.network.maxMessageBytes);if(ws.isHost)throw Error('HOST_READ_ONLY');if(!hello&&m.type!=='HELLO')throw Error('HELLO_REQUIRED');if(m.type==='HELLO'){if(hello)throw Error('ALREADY_HELLO');await core.hello(ws,m.resumeCredential);hello=true}else if(m.type==='INPUT_STATE'){const result=core.input(ws,m);if(result==='UNAUTHORIZED')throw Error(result)}else if(m.type==='HEARTBEAT')core.heartbeat(ws);else if(m.type==='LATENCY_PING')ws.send(JSON.stringify({type:'LATENCY_PONG',id:m.id}));else if(m.type==='LATENCY_REPORT')core.latency(ws,m);else if(m.type==='MOTION_STATE')core.motion(ws,m.state);else if(m.type==='LEAVE'){await core.lost(ws,true);ws.close()}}catch(e){const s=core.sockets.get(ws);if(s)s.invalid++;if(ws.readyState===1)ws.send(JSON.stringify({type:'ERROR',code:e.message}));if(['RATE_LIMIT','INVALID_CREDENTIAL','NO_SLOT','BRIDGE_UNAVAILABLE'].includes(e.message))ws.close()}});ws.on('close',()=>{sockets.delete(ws);hosts.delete(ws);core.lost(ws).catch(()=>{})});ws.on('error',()=>{})});
+async function shutdown(){if(closing)return;closing=true;clearInterval(timer);await core.shutdown();for(const ws of sockets)ws.close();wss.close();server.close()}
+process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
+try{await bridge.start();core.bridgeReady=true;server.listen(config.server.port,config.server.bind,()=>{console.log(`JoyLinkea-2 ${config.bridge.mode} mode: http://127.0.0.1:${server.address().port}/`);timer=setInterval(()=>core.tick().catch(console.error),100)})}catch(e){console.error('Bridge failed:',e);process.exitCode=1;await shutdown()}

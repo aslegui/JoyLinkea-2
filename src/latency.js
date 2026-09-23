@@ -1,0 +1,1 @@
+export class LatencyStats{constructor(){this.last=null;this.smooth=null;this.jitter=null}add(rtt){if(!Number.isFinite(rtt)||rtt<0)return;const previous=this.last;this.last=rtt;this.smooth=this.smooth===null?rtt:this.smooth*.8+rtt*.2;const delta=previous===null?0:Math.abs(rtt-previous);this.jitter=this.jitter===null?delta:this.jitter*.8+delta*.2}}

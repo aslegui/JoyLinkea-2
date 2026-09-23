@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {existsSync} from 'node:fs';import {resolve} from 'node:path';import {BridgeClient} from '../src/bridge-client.js';
+const binary=resolve('bridge/native/bin/Debug/net10.0-windows/JoyLinkBridge.dll');
+test('Bridge nativo: IPC sin crear dispositivo', {skip:!existsSync(binary)},async()=>{const b=new BridgeClient({mode:'native'});await b.start();try{const pong=await b.command('PING');assert.equal(pong.ok,true);const status=await b.command('STATUS');assert.equal(status.ok,true);await assert.rejects(b.command('SHELL'));}finally{await b.stop()}});

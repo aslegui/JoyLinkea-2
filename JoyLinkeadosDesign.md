@@ -190,6 +190,28 @@ tender inmediatamente hacia un estado neutral.
 Nunca debe quedar accidentalmente un botón, stick o trigger activado de
 manera permanente.
 
+Para V1, la protección cubre fallos individuales razonables del navegador,
+la conexión, Node Host, Controller Host o Safety Watchdog. El input activo
+debe dejar de observarse en XInput dentro de un plazo acotado; la meta del
+checkpoint nativo es **500 ms** desde la muerte confirmada del proceso.
+La eliminación del dispositivo puede terminar más tarde si XInput ya ve
+un estado neutral o desconectado. No se promete recuperación automática
+si Controller Host y Safety Watchdog mueren simultáneamente, Windows cae,
+se pierde energía o ningún componente de JoyLinkea puede ejecutar rescate.
+
+Mientras JoyLinkea utiliza HIDMaestro, asume uso exclusivo de sus
+dispositivos virtuales en esa PC: un rescate de emergencia puede retirar
+globalmente los dispositivos HIDMaestro, incluso los creados por otro
+software. Esta condición debe comunicarse al Host.
+
+La implementación V1 selecciona HIDMaestro 1.9.0 con Controller Host
+y Safety Watchdog. El checkpoint productivo con A activo observó XInput
+neutral a los **76,8035 ms** de la muerte confirmada del Controller Host,
+dentro de la meta de 500 ms. La aplicación normal inicia Native con
+HIDMaestro; Fake se selecciona explícitamente para desarrollo/tests. Esta
+aprobación conserva los límites de fallos individuales y exclusividad
+descritos arriba.
+
 ------------------------------------------------------------------------
 
 ## 6. Alcance de la primera versión

@@ -4,3 +4,7 @@ config/local.json
 .native-cache/
 bridge/native/bin/
 bridge/native/obj/
+test/vigem-checkpoint/bin/
+test/vigem-checkpoint/obj/
+test/hidmaestro-rescue/bin/
+test/hidmaestro-rescue/obj/

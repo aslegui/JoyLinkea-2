@@ -190,6 +190,42 @@ El criterio prioritario es:
 No debe elegirse C# por obligación si la integración técnica concreta
 favorece claramente otra alternativa.
 
+## 4.3 Controller Host y Safety Watchdog para HIDMaestro V1
+
+El Bridge C# existente evoluciona a **Controller Host**: es el único
+proceso que crea, actualiza y destruye normalmente controles HIDMaestro.
+Node conserva sesiones e input lógico; se comunica por Named Pipe local.
+Un **Safety Watchdog** C# elevado, independiente y sin LAN ni input,
+mantiene un handle verificado del Controller Host (PID y hora de inicio)
+y espera directamente su terminación. Ante muerte inesperada, ejecuta
+una sola vez `HMContext.RemoveAllVirtualControllers(preserveInstall:true)`.
+Esta operación preserva la instalación y es exclusivamente de emergencia.
+Requiere uso exclusivo de dispositivos virtuales HIDMaestro por JoyLinkea
+mientras opera; puede retirar los de otro software.
+
+El Controller Host vigila a su vez el handle real del Safety Watchdog.
+Si este muere, neutraliza, destruye y termina. No crea ni aplica input
+sin Watchdog sano. La vigilancia debe estar armada antes de permitir
+crear controles. Shutdown normal: neutralizar, destruir, confirmar,
+desarmar Watchdog y salir. Si el cleanup no puede confirmarse, el Watchdog
+permanece armado y rescata al salir el Controller Host.
+
+La garantía V1 se limita a fallos **individuales** con el otro proceso
+de seguridad vivo. No cubre la muerte simultánea de ambos, caída de
+Windows, pérdida de energía ni fallos que impidan ejecutar cualquier
+recuperación. La métrica de seguridad es `T0 → TxinputSafe`, donde XInput
+observa input neutral o dispositivo desconectado; objetivo ≤500 ms.
+`TrecoveryReturn` y desaparición PnP se registran por separado.
+
+**Backend seleccionado para V1:** HIDMaestro 1.9.0 con esta protección
+entre procesos. El checkpoint productivo del 2026-09-23 midió
+`T0→TxinputSafe=76,8035 ms` para A activo tras muerte abrupta del
+Controller Host; el Watchdog retornó `OK` y XInput/PnP volvieron al
+baseline. Los casos RT, stick y muerte del Watchdog pasaron en el
+harness aislado. El arranque normal usa Native/HIDMaestro; Fake se
+selecciona explícitamente para desarrollo y tests. Un fallo al iniciar
+Native termina con error y nunca cambia a Fake silenciosamente.
+
 ------------------------------------------------------------------------
 
 # 5. Una aplicación para el usuario, varios procesos internamente
@@ -206,7 +242,8 @@ Desde la arquitectura interna puede existir:
 JoyLinkea-2
 ├── Host/Launcher
 ├── Node Server
-└── Windows Bridge
+├── Controller Host (Bridge C# elevado)
+└── Safety Watchdog (proceso elevado independiente)
 ```
 
 El Launcher/Host debe:
@@ -1135,6 +1172,12 @@ watchdog propio. Ante pérdida, neutraliza todos los controles antes de
 destruirlos y salir. El launcher observa ambos procesos, pero no es la
 única defensa contra inputs retenidos.
 
+En el backend HIDMaestro, este es el watchdog **Node→Controller Host**;
+es independiente del proceso Safety Watchdog que protege ante muerte
+abrupta del Controller Host. El timeout de Node cancela la lectura IPC,
+dispara cleanup normal y desarma Safety Watchdog solo tras destruir todos
+los controles satisfactoriamente.
+
 ------------------------------------------------------------------------
 
 # 38. Crash del Bridge
@@ -1160,6 +1203,11 @@ existen realmente antes de recrearlos. No reenvía automáticamente los
 `JoyLinkeado` una vez confirmadas la creación del control y la salud del
 Bridge.
 
+Para HIDMaestro V1, Node **no reinicia automáticamente** el Controller
+Host tras una muerte inesperada: primero el Safety Watchdog debe retirar
+globalmente los controles y comprobarse un baseline seguro. Node marca
+el Bridge indisponible. El Watchdog no reconstruye sesiones ni controles.
+
 ------------------------------------------------------------------------
 
 # 39. Watchdog local
@@ -1170,6 +1218,11 @@ Host/Launcher puede supervisar:
 -   Bridge.
 
 No crear inicialmente un sistema de alta disponibilidad complejo.
+
+El Safety Watchdog de §4.3 es una excepción necesaria y acotada para
+evitar input retenido ante crash individual; no es un supervisor general
+de Node ni del sistema operativo. Su único comando normal es desarme
+tras cleanup confirmado; no acepta comandos de input ni abre red.
 
 Solo se requiere detectar:
 
@@ -2027,8 +2080,8 @@ verificar su estado actual.
 La decisión debe quedar registrada en un ADR o sección técnica antes de
 acoplar el Bridge.
 
-**Candidato para la prueba temprana, no dependencia definitiva:**
-HIDMaestro con Bridge C#/.NET. Ofrece un SDK para controles Xbox virtuales
+**Registro histórico de la selección previa al checkpoint:**
+HIDMaestro con Bridge C#/.NET ofrece un SDK para controles Xbox virtuales
 y múltiples dispositivos, pero es relativamente reciente. Versiones
 publicadas en 2026 documentaron problemas graves de instalación/cleanup
 y alertas de antivirus; por ello no basta con compilar ni confiar en el
@@ -2037,6 +2090,20 @@ controles, eliminación, cierre forzado de Node, cierre forzado del Bridge
 y recuperación. Fijar versión solo tras esa evidencia. Revisar licencia
 MIT y licencias de cada componente redistribuido, elevación para
 instalación, certificado local y requisitos de .NET.
+
+**Estado final del checkpoint 2026-09-23:** HIDMaestro 1.9.0 superó en un
+harness aislado la seguridad XInput ante muerte individual del Owner
+con A, RT y left stick activos, y ante muerte del Watchdog, al usar
+espera directa de handles. La arquitectura Controller Host + Safety
+Watchdog ya está integrada y pasó flujo normal de dos clientes,
+pérdida de Node, shutdown, crash productivo con dos controles y
+restart posterior. Una medición posterior en el runtime productivo,
+con A activo enviado por WebSocket/Node/IPC, obtuvo
+`T0→TxinputSafe=76,8035 ms`, retorno de recovery `OK` y baseline final
+limpio. El fallo de instrumentación anterior quedó superado. HIDMaestro
+1.9.0 queda aprobado como backend nativo V1 bajo el contrato de fallos
+individuales y exclusividad indicado en §4.3. ViGEmBus permanece
+suspendido. Ver ADR y checkpoint para datos exactos.
 
 ViGEmBus/ViGEmClient es fallback técnico a evaluar, con licencia
 BSD-3-Clause, pero el proyecto original fue retirado y ya no recibe

@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using HIDMaestro;
 
 // Native Bridge candidate. --self-test never creates a Windows device.
@@ -6,6 +9,28 @@ if (args.Length == 2 && args[0] == "--checkpoint-one")
 {
     using var log = new StreamWriter(args[1]) { AutoFlush = true };
     await NativeCheckpoint.OneAsync(log);
+    return;
+}
+if (args.Length == 2 && args[0] == "--checkpoint-lifecycle")
+{
+    using var log = new StreamWriter(args[1]) { AutoFlush = true };
+    await NativeCheckpoint.LifecycleAsync(log);
+    return;
+}
+if (args.Length == 2 && args[0] == "--checkpoint-multiple")
+{
+    using var log = new StreamWriter(args[1]) { AutoFlush = true };
+    await NativeCheckpoint.MultipleAsync(log);
+    return;
+}
+if (args.Length == 1 && args[0] == "--probe-xinput")
+{
+    Console.WriteLine(JsonSerializer.Serialize(NativeCheckpoint.Probe()));
+    return;
+}
+if (args.Length == 3 && args[0] == "--safety-watchdog")
+{
+    Environment.ExitCode = SafetyWatchdog.Run(int.Parse(args[1]), long.Parse(args[2]));
     return;
 }
 if (args.Length == 1 && args[0] == "--self-test")
@@ -25,6 +50,48 @@ if (args.Length == 1 && args[0] == "--install")
     using var installContext = new HMContext();
     installContext.InstallDriver();
     Console.WriteLine("DRIVER_INSTALL_COMPLETE");
+    return;
+}
+if (args.Length == 3 && args[0] == "--pipe")
+{
+    try
+    {
+    if (!System.Text.RegularExpressions.Regex.IsMatch(args[1], "^joylinkea2-[a-f0-9]{32}$")) throw new ArgumentException("INVALID_PIPE_NAME");
+    if (!int.TryParse(args[2], out var watchdogMs) || watchdogMs is < 500 or > 30000) throw new ArgumentException("INVALID_WATCHDOG_MS");
+    using var safety = SafetySession.Start();
+    var user = WindowsIdentity.GetCurrent().User ?? throw new InvalidOperationException("WINDOWS_USER_UNAVAILABLE");
+    var pipeSecurity = new PipeSecurity();
+    pipeSecurity.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
+    using var pipe = NamedPipeServerStreamAcl.Create(args[1], PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, pipeSecurity);
+    using var connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    await pipe.WaitForConnectionAsync(connectTimeout.Token);
+    if (!safety.IsHealthy) throw new InvalidOperationException("SAFETY_WATCHDOG_LOST_BEFORE_CONNECT");
+    using var input = new StreamReader(pipe, System.Text.Encoding.UTF8, leaveOpen: true);
+    using var output = new StreamWriter(pipe, new System.Text.UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+    using var pipeBridge = new NativeBridge(input, output, watchdogMs, () => safety.IsHealthy, safety.ProcessId, safety.ProcessStartTicks);
+    safety.Monitor(pipeBridge);
+    try
+    {
+        await pipeBridge.RunAsync();
+    }
+    finally
+    {
+        pipeBridge.Dispose();
+        if (pipeBridge.CleanupSucceeded) safety.Disarm();
+    }
+    }
+    catch (Exception error)
+    {
+        try
+        {
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JoyLinkea-2", "logs");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Combine(directory, "controller-host.log"), $"{DateTimeOffset.Now:O} pid={Environment.ProcessId} {error}{Environment.NewLine}");
+        }
+        catch { }
+        Console.Error.WriteLine(error);
+        Environment.ExitCode = 1;
+    }
     return;
 }
 if (args.Length != 1 || args[0] != "--run")
@@ -81,27 +148,39 @@ internal sealed record PadState(
 
 internal sealed class NativeBridge : IDisposable
 {
+    private readonly TextReader input;
+    private readonly TextWriter output;
     private readonly HMContext context = new();
     private readonly Dictionary<int, HMController> controllers = new();
     private readonly Dictionary<int, PadState> states = new();
     private readonly object gate = new();
     private readonly Timer watchdog;
+    private readonly CancellationTokenSource nodeTimeout = new();
+    private readonly Func<bool> safetyHealthy;
+    private readonly int safetyPid;
+    private readonly long safetyStartTicks;
     private long lastPing = Environment.TickCount64;
     private bool disposed;
+    public bool CleanupSucceeded { get; private set; }
     private static readonly PadState Neutral = new(0,0,0,0,0,0,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
 
-    public NativeBridge()
+    public NativeBridge(TextReader? input = null, TextWriter? output = null, int? watchdogMs = null, Func<bool>? safetyHealthy = null, int safetyPid = 0, long safetyStartTicks = 0)
     {
+        this.input = input ?? Console.In;
+        this.output = output ?? Console.Out;
+        this.safetyHealthy = safetyHealthy ?? (() => false);
+        this.safetyPid = safetyPid;
+        this.safetyStartTicks = safetyStartTicks;
         context.LoadDefaultProfiles();
-        var timeout = int.TryParse(Environment.GetEnvironmentVariable("JOYLINKEA_BRIDGE_WATCHDOG_MS"), out var configured) && configured > 0 ? configured : 3000;
-        watchdog = new Timer(_ => { if (Environment.TickCount64 - Interlocked.Read(ref lastPing) > timeout) { Dispose(); Environment.Exit(1); } }, null, 250, 250);
+        var timeout = watchdogMs ?? (int.TryParse(Environment.GetEnvironmentVariable("JOYLINKEA_BRIDGE_WATCHDOG_MS"), out var configured) && configured > 0 ? configured : 3000);
+        watchdog = new Timer(_ => { if (Environment.TickCount64 - Interlocked.Read(ref lastPing) > timeout) nodeTimeout.Cancel(); }, null, 250, 250);
     }
     public async Task RunAsync()
     {
         try
         {
             string? line;
-            while ((line = await Console.In.ReadLineAsync()) != null)
+            while ((line = await input.ReadLineAsync(nodeTimeout.Token)) != null)
             {
                 long id = -1;
                 try
@@ -119,11 +198,11 @@ internal sealed class NativeBridge : IDisposable
                         {
                             case "PING": Interlocked.Exchange(ref lastPing, Environment.TickCount64); extra = new { type = "PONG" }; break;
                             case "CREATE_CONTROLLER": Create(Slot(cmd)); break;
-                            case "SET_STATE": Set(Slot(cmd), PadState.Parse(cmd.GetProperty("state"))); break;
+                            case "SET_STATE": if (!safetyHealthy()) throw new InvalidOperationException("SAFETY_WATCHDOG_LOST"); Set(Slot(cmd), PadState.Parse(cmd.GetProperty("state"))); break;
                             case "NEUTRALIZE": Neutralize(Slot(cmd)); break;
                             case "DESTROY_CONTROLLER": Destroy(Slot(cmd)); break;
                             case "NEUTRALIZE_ALL": NeutralizeAll(); break;
-                            case "STATUS": extra = new { controllers = states.Select(kv => new { id = kv.Key, state = kv.Value }).ToArray() }; break;
+                            case "STATUS": extra = new { controllers = states.Select(kv => new { id = kv.Key, state = kv.Value }).ToArray(), safetyWatchdogPid = safetyPid, safetyWatchdogStartTicks = safetyStartTicks.ToString() }; break;
                             case "SHUTDOWN": NeutralizeAll(); foreach (var slot in controllers.Keys.ToArray()) Destroy(slot); Write(id, true); return;
                             default: throw new InvalidDataException("UNKNOWN_COMMAND");
                         }
@@ -133,6 +212,7 @@ internal sealed class NativeBridge : IDisposable
                 catch (Exception error) { Write(id, false, error: error is InvalidDataException ? error.Message : "BACKEND_ERROR"); }
             }
         }
+        catch (OperationCanceledException) when (nodeTimeout.IsCancellationRequested) { }
         finally { Dispose(); }
     }
     private static int Slot(JsonElement cmd)
@@ -143,11 +223,13 @@ internal sealed class NativeBridge : IDisposable
     }
     private void Create(int slot)
     {
+        if (!safetyHealthy()) throw new InvalidOperationException("SAFETY_WATCHDOG_LOST");
         if (controllers.ContainsKey(slot)) throw new InvalidDataException("CONTROLLER_EXISTS");
+        if (controllers.Count == 0 && NativeCheckpoint.HasPresentHidMaestroDevice()) throw new InvalidOperationException("PNP_RESIDUAL_BEFORE_CREATE");
         var profile = context.GetProfile("xbox-360-wired") ?? throw new InvalidOperationException("PROFILE_MISSING");
         var ctrl = context.CreateController(profile, $"joylinkea2-slot-{slot}");
         controllers[slot] = ctrl;
-        try { Set(slot, Neutral); }
+        try { Set(slot, Neutral); if (!safetyHealthy()) throw new InvalidOperationException("SAFETY_WATCHDOG_LOST"); }
         catch { controllers.Remove(slot); ctrl.Dispose(); throw; }
     }
     private void Set(int slot, PadState s)
@@ -182,13 +264,13 @@ internal sealed class NativeBridge : IDisposable
     }
     private void Neutralize(int slot) { if (controllers.ContainsKey(slot)) Set(slot, Neutral); }
     private void NeutralizeAll() { foreach (var slot in controllers.Keys.ToArray()) Neutralize(slot); }
-    private void Destroy(int slot) { if (!controllers.Remove(slot, out var ctrl)) return; NeutralStateBeforeDispose(ctrl); ctrl.Dispose(); states.Remove(slot); }
+    private void Destroy(int slot) { if (!controllers.TryGetValue(slot, out var ctrl)) return; NeutralStateBeforeDispose(ctrl); ctrl.Dispose(); controllers.Remove(slot); states.Remove(slot); }
     private static void NeutralStateBeforeDispose(HMController ctrl) { var state = new HMGamepadState { Axes = HMGamepadStateHelpers.StandardAxes(ctrl.Profile) }; ctrl.SubmitState(in state); }
-    private static void Write(long id, bool ok, object? data = null, string? error = null)
+    private void Write(long id, bool ok, object? data = null, string? error = null)
     {
         var json = JsonSerializer.Serialize(new { id, ok, error, data });
-        Console.Out.WriteLine(json);
-        Console.Out.Flush();
+        output.WriteLine(json);
+        output.Flush();
     }
     public void Dispose()
     {
@@ -197,9 +279,12 @@ internal sealed class NativeBridge : IDisposable
             if (disposed) return;
             disposed = true;
             watchdog.Dispose();
-            try { NeutralizeAll(); } catch { }
-            foreach (var slot in controllers.Keys.ToArray()) { try { Destroy(slot); } catch { } }
-            context.Dispose();
+            nodeTimeout.Cancel();
+            var clean = true;
+            foreach (var slot in controllers.Keys.ToArray()) { try { Neutralize(slot); } catch { clean = false; } }
+            foreach (var slot in controllers.Keys.ToArray()) { try { Destroy(slot); } catch { clean = false; } }
+            try { context.Dispose(); } catch { clean = false; }
+            CleanupSucceeded = clean && controllers.Count == 0;
         }
     }
 }

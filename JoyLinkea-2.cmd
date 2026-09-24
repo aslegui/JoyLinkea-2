@@ -12,6 +12,6 @@ if not exist node_modules\ws (
   pause
   exit /b 1
 )
-start "" "http://127.0.0.1:5182/"
+set "JOYLINKEA_OPEN_BROWSER=1"
 node src\server.js
 if errorlevel 1 pause

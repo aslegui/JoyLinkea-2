@@ -32,3 +32,12 @@ test('fallo al iniciar Native no crea un Fake silencioso',async()=>{
   assert.equal(bridge.child,undefined);
   assert.equal(bridge.alive,false);
 });
+
+test('Online público exige WSS y HTTPS; LAN permanece sin relay',()=>{
+  const code="import {loadConfig} from './src/config.js'; console.log(loadConfig().online.publicBaseUrl)";
+  const run=env=>spawnSync(process.execPath,['--input-type=module','-e',code],{env:{...process.env,...env},encoding:'utf8',windowsHide:true});
+  const invalid=run({JOYLINKEA_RELAY_URL:'ws://relay.example/tunnel',JOYLINKEA_PUBLIC_BASE_URL:'http://relay.example'});
+  assert.notEqual(invalid.status,0);assert.match(invalid.stderr,/ONLINE_TLS_REQUIRED/);
+  const valid=run({JOYLINKEA_RELAY_URL:'wss://relay.example/tunnel',JOYLINKEA_PUBLIC_BASE_URL:'https://relay.example'});
+  assert.equal(valid.status,0,valid.stderr);
+});

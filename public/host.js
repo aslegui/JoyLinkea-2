@@ -3,6 +3,9 @@ const slots=document.querySelector('#slots');
 const urls=document.querySelector('#urls');
 const mode=document.querySelector('#mode');
 const note=document.querySelector('#bridge-note');
+const onlineStatus=document.querySelector('#online-status');
+const explanation=document.querySelector('#invite-explanation');
+let lanUrls=[],online={mode:'LAN',state:'Offline',url:''};
 
 async function copyInvite(url){
   if(navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(url);return true}catch{}}
@@ -27,6 +30,20 @@ function showInvites(controlUrls){
   }));
 }
 
+function renderAccess(){
+  for(const radio of document.querySelectorAll('[name=access-mode]'))radio.checked=radio.value===online.mode;
+  onlineStatus.textContent=online.mode==='LAN'?'Offline':online.state+(online.error?` · ${online.error}`:'');
+  explanation.textContent=online.mode==='LAN'?'Escaneá el QR o compartí la URL LAN con Invite. El celular debe estar en la misma red.':'Compartí la invitación Online. El link da acceso solo al Controller y vence al desactivar Online.';
+  if(online.mode==='LAN'){showInvites(lanUrls);return}
+  if(online.state!=='Online'||!online.url){urls.textContent=online.state==='Error'?online.error:'Connecting...';return}
+  showInvites([online.url]);const qr=urls.querySelector('img');if(qr)qr.src=`/control-qr.svg?online=1&t=${Date.now()}`;
+}
+for(const radio of document.querySelectorAll('[name=access-mode]'))radio.addEventListener('change',async()=>{
+  online={...online,mode:radio.value,state:radio.value==='LAN'?'Offline':'Connecting',url:''};renderAccess();
+  try{const response=await fetch(`/api/online?action=${radio.value==='LAN'?'close':'open'}`,{method:'POST'});if(!response.ok)throw Error('No se pudo cambiar el modo');online=await response.json();renderAccess()}
+  catch(error){online={mode:'Online',state:'Error',error:error.message,url:''};renderAccess()}
+});
+
 function showSlots(items){
   slots.replaceChildren(...items.map(s=>{
     const div=document.createElement('div');div.className='slot';
@@ -39,17 +56,18 @@ function showSlots(items){
 
 function connect(){
   const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/host-ws`);
-  ws.onopen=()=>status.textContent='Servidor LAN activo';
+  ws.onopen=()=>status.textContent='Servidor activo';
   ws.onclose=()=>{status.textContent='Sin conexión al Host';setTimeout(connect,1000)};
   ws.onmessage=e=>{
     const m=JSON.parse(e.data);
     if(m.type==='HOST_INFO'){
       mode.textContent=`Bridge: ${m.mode} · Puerto: ${m.port}`;
       note.textContent=m.mode==='fake'?'Modo diagnóstico: no crea controles de Windows.':'Modo nativo: los celulares crean controles Xbox/XInput en Windows.';
-      showInvites(m.urls);
+      lanUrls=m.urls;online=m.online||online;renderAccess();
     }
+    if(m.type==='HOST_ONLINE'){online=m.online;renderAccess()}
     if(m.type==='HOST_STATE'){
-      status.textContent=m.bridgeReady?'Servidor LAN activo':'Bridge no disponible';
+      status.textContent=m.bridgeReady?'Servidor activo':'Bridge no disponible';
       showSlots(m.slots);
     }
   };

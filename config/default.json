@@ -6,5 +6,6 @@
   "latency":{"sampleIntervalMs":3000},
   "motion":{"enabled":true},
   "logging":{"level":"INFO"},
-  "bridge":{"commandTimeoutMs":1500,"watchdogMs":3000,"mode":"native"}
+  "bridge":{"commandTimeoutMs":1500,"watchdogMs":3000,"mode":"native"},
+  "online":{"relayUrl":"","publicBaseUrl":""}
 }

@@ -9,10 +9,12 @@
 <body class="host-page">
   <main>
     <h1>JoyLinkea-2</h1>
+    <fieldset class="access-mode"><legend>Conexión</legend><label><input type="radio" name="access-mode" value="LAN" checked> LAN</label><label><input type="radio" name="access-mode" value="Online"> Online</label></fieldset>
     <p id="host-status">Iniciando…</p>
     <p id="mode"></p>
+    <p id="online-status" role="status">Offline</p>
     <h2>Conectar celulares</h2>
-    <p>Escaneá el QR o compartí la URL LAN con Invite. El celular debe estar en la misma red.</p>
+    <p id="invite-explanation">Escaneá el QR o compartí la URL LAN con Invite. El celular debe estar en la misma red.</p>
     <div id="urls" class="invite-grid"></div>
     <h2>Jugadores y prueba de controles</h2>
     <div id="slots"></div>

@@ -136,3 +136,28 @@ test('Invite copia exactamente la URL LAN de Control y usa QR local',async()=>{
     assert.equal(window.document.querySelector('.invite-feedback').textContent,'Copied!');
   }finally{dom.window.close()}
 });
+
+test('Host conmuta QR e Invite Online sin filtrar la URL LAN',async()=>{
+  const hostHtml=readFileSync(new URL('../public/host.html',import.meta.url),'utf8');
+  const hostScript=readFileSync(new URL('../public/host.js',import.meta.url),'utf8');
+  const dom=new JSDOM(hostHtml,{url:'http://localhost/',runScripts:'outside-only'});
+  const {window}=dom;let copied='';
+  Object.defineProperty(window.navigator,'clipboard',{value:{writeText:async text=>{copied=text}}});
+  class FakeWebSocket{constructor(){FakeWebSocket.instance=this}}
+  window.WebSocket=FakeWebSocket;
+  try{
+    window.eval(hostScript);
+    const lan='http://192.168.1.39:5182/control',remote='https://relay.example/j/opaque-token/control';
+    FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_INFO',mode:'fake',port:5182,urls:[lan],online:{mode:'LAN',state:'Offline',url:''}})});
+    FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_ONLINE',online:{mode:'Online',state:'Connecting',url:''}})});
+    assert.equal(window.document.querySelector('.invite-card'),null);
+    assert.equal(window.document.querySelector('#urls').textContent,'Connecting...');
+    FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_ONLINE',online:{mode:'Online',state:'Online',url:remote}})});
+    assert.equal(window.document.querySelector('.invite-card a').href,remote);
+    assert.match(window.document.querySelector('.invite-card img').src,/control-qr\.svg\?online=1/);
+    window.document.querySelector('.invite-card button').click();await new Promise(resolve=>setImmediate(resolve));assert.equal(copied,remote);
+    FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_ONLINE',online:{mode:'LAN',state:'Offline',url:''}})});
+    assert.equal(window.document.querySelector('.invite-card a').href,lan);
+    window.document.querySelector('.invite-card button').click();await new Promise(resolve=>setImmediate(resolve));assert.equal(copied,lan);
+  }finally{dom.window.close()}
+});

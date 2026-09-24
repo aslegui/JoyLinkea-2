@@ -247,9 +247,6 @@ La primera versión funcional se concentra exclusivamente en **LAN**.
 
 ### Fuera de alcance de V1
 
--   Conexiones a través de Internet.
--   Relay público.
--   Invitaciones online.
 -   Streaming de video/audio.
 -   Emulación universal de Wii, Switch u otros protocolos
     propietarios/específicos.
@@ -1203,12 +1200,22 @@ la primera versión.
 
 ------------------------------------------------------------------------
 
-## 29. Online: dirección futura
+## 29. Online
 
-Online **no forma parte de V1**, pero su objetivo ya está definido.
+El Host permite elegir **LAN** (predeterminado) u **Online**. LAN conserva
+la URL `http://<LAN-IP>:<port>/control`, QR local e Invite. Online
+requiere un relay público desplegado y configurado; el Host mantiene un
+túnel saliente y no necesita port forwarding. Un invitado externo abre
+la URL HTTPS con token aleatorio y obtiene el mismo Controller y pipeline
+de sesiones, input, Controller Host y XInput que en LAN.
 
-En el futuro, un Host podrá habilitar acceso remoto y generar una
-invitación privada.
+Al activar Online se crea una invitación nueva. QR e Invite muestran
+exclusivamente la URL del modo seleccionado. Al desactivar Online, el
+token se revoca, se cierran las conexiones remotas y sus inputs se
+neutralizan conforme al lifecycle de sesión existente. La reconexión
+dentro de la gracia conserva el slot, siempre neutral hasta recibir
+input nuevo. Host muestra Offline, Connecting, Online o Error, clientes
+y RTT; el RTT sigue midiendo Browser↔Host.
 
 Un jugador remoto podrá abrir el enlace y utilizar su dispositivo como
 joystick del Host a través de Internet.
@@ -1224,7 +1231,7 @@ ejemplo:
 
 JoyLinkea-2 no debe absorber esa responsabilidad.
 
-### 29.1 Invitaciones futuras
+### 29.1 Invitaciones
 
 Las invitaciones online deberían ser:
 
@@ -1232,13 +1239,15 @@ Las invitaciones online deberían ser:
 -   difíciles de adivinar;
 -   revocables;
 -   asociadas a una sesión;
--   potencialmente de un solo uso;
--   potencialmente expirables.
+-   limitadas a autoridad de Controller, sin endpoints de Host;
+-   regeneradas en cada nueva activación.
 
-### 29.2 Relay futuro
+### 29.2 Relay
 
-La futura conectividad online puede incorporar un relay/gateway para
-evitar depender de configuración manual de puertos, NAT o CGNAT.
+El relay transporta exclusivamente la página Controller y su WebSocket.
+Opera por conexión saliente del Host y funciona detrás de NAT/CGNAT
+cuando el Host alcanza el relay público. Requiere DNS/TLS y deployment
+externo; no proporciona video, audio ni streaming.
 
 Esto debe poder agregarse sin modificar el concepto central:
 
@@ -1336,7 +1345,7 @@ pertenece a una fase posterior.
 
 Especialmente durante V1 deben evitarse:
 
--   abstracciones prematuras para servicios online aún inexistentes;
+-   servicios adicionales Online fuera del relay de Controller;
 -   integraciones específicas con juegos;
 -   streaming;
 -   sistemas de cuentas;
@@ -1384,7 +1393,7 @@ El producto prioriza:
 -   neutralización inmediata ante fallos;
 -   independencia respecto del juego;
 -   seguridad mediante un protocolo limitado a inputs;
--   futura extensibilidad hacia Online y Motion especializado.
+-   Online opcional y futura extensibilidad hacia Motion especializado.
 
 La primera versión debe demostrar que un grupo puede sentarse frente a
 una PC/TV, abrir JoyLinkea-2, conectarse con sus celulares y utilizarlos

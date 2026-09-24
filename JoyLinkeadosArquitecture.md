@@ -18,11 +18,11 @@ La arquitectura está diseñada inicialmente para:
 
 -   Windows como Host.
 -   Clientes web móviles.
--   Comunicación LAN.
+-   Comunicación LAN y, de forma opcional, Online mediante relay.
 -   Un gamepad virtual por cliente.
 -   Baja latencia.
 -   Reconexión segura.
--   Extensibilidad futura hacia Online.
+-   Un único pipeline de sesiones/input para LAN y Online.
 -   Separación estricta entre red, sesiones e integración nativa con
     Windows.
 
@@ -40,7 +40,7 @@ Browser móvil
     ↓
 Cliente Web
     ↓
-WebSocket LAN
+WebSocket LAN o túnel Online
     ↓
 Servidor Host
     ↓
@@ -67,8 +67,8 @@ La arquitectura debe asegurar que:
 6.  el último estado válido pueda aplicarse con baja latencia;
 7.  ante incertidumbre o desconexión el gamepad sea neutralizado;
 8.  el componente nativo de Windows tenga una responsabilidad mínima;
-9.  la futura modalidad Online pueda reemplazar/extender la capa de
-    transporte sin reescribir el sistema de gamepads.
+9.  Online extienda solo la capa de transporte sin reescribir el
+    sistema de gamepads.
 
 ------------------------------------------------------------------------
 
@@ -87,7 +87,7 @@ Motivos:
 -   fácil distribución de archivos web;
 -   adecuado para manejar múltiples clientes;
 -   permite mantener cliente y servidor en un ecosistema simple;
--   facilita posteriormente incorporar relay/online;
+-   permite un relay/túnel Online separado del núcleo;
 -   no necesita encargarse directamente de APIs nativas complejas de
     Windows.
 
@@ -1900,7 +1900,7 @@ Luego robustecerlo.
 
 ------------------------------------------------------------------------
 
-# 64. Online futuro
+# 64. Online
 
 La arquitectura debe permitir:
 
@@ -1914,6 +1914,17 @@ Browser
 → Relay/Gateway
 → Node Host
 ```
+
+El Host abre un túnel WebSocket saliente `wss://<relay>/tunnel`. El relay
+solo reenvía `/j/<token>/control`, sus assets y `/j/<token>/ws`; no
+publica Host UI, API de administración, Named Pipe ni Bridge. El token
+aleatorio de 32 bytes se valida en el relay antes de aceptar conexiones
+y nuevamente en el Host antes de abrir el WebSocket local `/ws`.
+El relay conserva el mapeo token→túnel mientras el Host está conectado.
+El Host revoca explícitamente al cerrar Online. Si cae el túnel, se
+cierran los sockets locales y Core neutraliza sus sesiones; heartbeat,
+input timeout y gracia siguen siendo los de LAN. No hay segunda
+implementación de GamepadState.
 
 Todo lo posterior permanece:
 
@@ -1929,12 +1940,14 @@ Por eso Network Layer no debe estar mezclado con Controller Manager.
 
 ------------------------------------------------------------------------
 
-# 65. Invitaciones online futuras
+# 65. Invitaciones Online
 
-No implementar en V1.
-
-Pero Session Manager debe poder evolucionar para recibir una
-identidad/autorización creada por un sistema externo.
+Cada activación genera un token criptográfico nuevo. La URL anterior
+deja de aceptar conexiones al revocar. El token autoriza solamente la
+conexión Controller a través del relay; el Host continúa asignando
+`session→slot→controller`. La URL se muestra en Host QR e Invite solo
+cuando el relay confirma disponibilidad. La UI de administración y sus
+acciones permanecen limitadas a loopback.
 
 No hardcodear:
 
@@ -1946,14 +1959,20 @@ Una IP jamás debe ser la identidad de un jugador.
 
 ------------------------------------------------------------------------
 
-# 66. Relay futuro
+# 66. Relay desplegable
 
-El Host debería poder mantener una conexión saliente al relay.
+`relay/server.js` es un proceso Node independiente. Requiere una URL
+pública HTTPS y reverse proxy con WebSocket/TLS, y `relayUrl` (WSS) más
+`publicBaseUrl` en la configuración del Host. Se recomienda un relay
+dedicado a JoyLinkea; no se guardan credenciales en el repositorio.
+El túnel usa mensajes JSON con IDs para HTTP y WebSocket; las rutas
+públicas son una allowlist. Ping/pong detecta la pérdida del túnel y el
+backpressure excesivo lo cierra para no acumular estados viejos.
 
-Esto evita diseñar el futuro sistema alrededor de port forwarding
-obligatorio.
-
-No implementar todavía.
+UYC sirvió de referencia para token, activación/revocación, estado de
+Host y control local de administración. Su transporte real era UPnP y
+puerto entrante, por lo que no se trasladó a JoyLinkea: no satisface el
+requisito de NAT/CGNAT sin port forwarding.
 
 ------------------------------------------------------------------------
 
@@ -2019,9 +2038,9 @@ Solo diagnóstico; no necesita telemetría externa.
 
 # 70. Privacidad
 
-V1 debe funcionar completamente local.
+LAN debe funcionar completamente local, aun sin Internet ni relay.
 
-No enviar:
+En modo LAN no enviar:
 
 -   inputs;
 -   IPs;
@@ -2031,8 +2050,9 @@ No enviar:
 
 a servidores externos.
 
-Si en el futuro existe infraestructura Online, documentar separadamente
-qué información transita por ella.
+En modo Online, el relay transporta la página Controller, token y
+mensajes de input/sesión. No recibe comandos nativos ni información del
+juego. Los operadores deben evitar registrar URLs completas con token.
 
 ------------------------------------------------------------------------
 
@@ -2195,7 +2215,8 @@ El Host genera localmente un SVG QR por URL LAN `/control`. La ruta
 `/control-qr.svg?index=n` toma la URL de la misma lista de interfaces
 que comunica `HOST_INFO`; el índice inválido devuelve 404. Invite copia
 exactamente esa URL mediante clipboard del navegador y muestra feedback.
-No se agrega servicio cloud, relay ni invitación Online.
+En modo Online el mismo espacio del Host muestra el QR de la URL
+HTTPS de invitación. LAN conserva el QR por IP local.
 
 ------------------------------------------------------------------------
 
@@ -2429,7 +2450,7 @@ Durante implementación, Codex debe:
 6.  evitar duplicar lógica;
 7.  agregar tests con cada subsistema;
 8.  preservar neutralización segura;
-9.  no introducir Online en V1;
+9.  mantener Online limitado al transporte Controller y sin streaming;
 10. no introducir streaming;
 11. no mezclar Bridge con networking;
 12. no permitir que el cliente elija arbitrariamente controllerId;
@@ -2594,8 +2615,7 @@ Solo acepta IPC local autorizado por Host.
 
 ### Invariant 9
 
-**Online futuro no debe requerir reescribir Controller Manager o
-Bridge.**
+**Online comparte Controller Manager y Bridge con LAN.**
 
 ### Invariant 10
 
@@ -2666,8 +2686,7 @@ La arquitectura separa deliberadamente cuatro problemas:
 ```
 
 Esta separación es la base para que JoyLinkea-2 pueda empezar como una
-herramienta LAN pequeña y posteriormente incorporar Online sin rehacer
-su núcleo.
+herramienta LAN pequeña y añadir Online sin rehacer su núcleo.
 
 La prioridad de implementación debe permanecer siempre:
 

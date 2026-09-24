@@ -226,7 +226,7 @@ La primera versión funcional se concentra exclusivamente en **LAN**.
 -   Varios clientes simultáneos.
 -   Un gamepad virtual independiente por cliente/jugador.
 -   Layout de control táctil.
--   Soporte portrait y landscape.
+-   Layout horizontal responsive y aviso para girar el celular en portrait.
 -   Modelo de control equivalente a un gamepad moderno tipo Xbox.
 -   Sticks analógicos.
 -   D-pad.
@@ -295,8 +295,9 @@ Como mínimo debe poder presentar:
 -   puerto utilizado, cuando corresponda;
 -   estado del servidor.
 
-Es deseable contemplar posteriormente un QR que permita abrir la
-dirección directamente desde el celular.
+El Host muestra un QR generado localmente para cada URL LAN `/control` y
+un botón **Invite** que copia esa URL completa al portapapeles con feedback.
+No hay invitación remota ni dependencia de Internet.
 
 ### 7.3 Lista de jugadores
 
@@ -374,14 +375,10 @@ La interfaz debe priorizar:
 
 ### 8.4 Portrait y landscape
 
-JoyLinkea-2 debe admitir ambas orientaciones.
-
-El jugador puede utilizar el celular:
-
--   verticalmente;
--   horizontalmente.
-
-El layout debe adaptarse de manera responsive.
+El Controller usa un único layout horizontal responsive. Landscape es la
+orientación normal. En portrait conserva esa composición, muestra
+**Rotate your phone** arriba y guía al jugador a girar el celular; no
+existe un segundo joystick vertical.
 
 La orientación modifica la **presentación**, no la identidad ni el
 significado de los controles.
@@ -389,14 +386,32 @@ significado de los controles.
 Por ejemplo, `A` continúa siendo `A` independientemente de la
 orientación.
 
-Landscape debería ser la disposición más parecida a un gamepad físico,
-aprovechando el ancho disponible.
-
-Portrait debe reorganizar los elementos para conservar accesibilidad y
-evitar superposiciones.
+El control completo debe caber sin scroll horizontal ni vertical,
+escalando sticks, D-pad, botones, triggers y separaciones según tamaño,
+proporción y safe areas.
 
 Cambiar la orientación durante una sesión no debe desconectar al jugador
 ni crear otro gamepad.
+
+### 8.5 Modos y preferencias del Controller
+
+Los dropdowns **Type** (`Simple Analog`, `Simple DPAD`, `Complete
+Joystick`) y **Triggers** (1, 2, 3) cambian la presentación de inmediato
+sin recrear sesión ni gamepad. `Simple Analog` muestra L Analog,
+Select/Start y ABXY; `Simple DPAD` muestra D-pad, Select/Start y ABXY.
+`Complete Joystick` muestra D-pad, ambos sticks, Select/Start y ABXY.
+
+En `Complete Joystick` aparece **Priority**, por defecto `DPAD`, para
+intercambiar en la zona izquierda la posición principal del D-pad y L
+Analog. Los tres modos colocan arriba los controles superiores visibles:
+1 = L1/R1; 2 agrega L2/R2; 3 agrega L3/R3. L1/R1 corresponden a
+bumpers, L2/R2 a triggers analógicos y L3/R3 a clicks de sticks.
+
+Type, Triggers y Priority se recuerdan en almacenamiento local del
+navegador; defaults: Complete Joystick, 3, DPAD. Al cambiar cualquier
+preferencia se neutraliza primero el input activo, especialmente el que
+deja de estar visible. La preferencia no es parte del protocolo ni del
+estado de sesión del Host.
 
 ------------------------------------------------------------------------
 
@@ -768,9 +783,9 @@ Ejemplo conceptual:
 
 `http://<IP-del-host>:<puerto>`
 
-El producto puede agregar posteriormente:
+El producto incluye QR local e Invite para la URL `/control`. Puede
+agregar posteriormente:
 
--   QR;
 -   nombre amigable;
 -   descubrimiento automático;
 -   acceso mediante hostname local.
@@ -1295,7 +1310,8 @@ pueda demostrar de manera repetible que:
 16. cerrar JoyLinkea-2 limpia los gamepads creados.
 17. un juego compatible puede utilizar los controles sin integración
     específica con JoyLinkea-2.
-18. portrait y landscape son utilizables.
+18. landscape es utilizable sin scroll; portrait muestra la indicación de
+    rotar sin desconectar ni cambiar de slot.
 19. el Host puede observar el estado básico de cada jugador.
 20. los errores principales producen mensajes comprensibles.
 21. ningún cliente dispone de una interfaz para ejecutar comandos

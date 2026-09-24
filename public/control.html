@@ -1,1 +1,91 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>JoyLinkea-2 · Control</title><link rel="stylesheet" href="/styles.css"></head><body class="controller-page"><header><strong>JoyLinkea-2</strong><span id="status">Conectando…</span><span id="latency">Latencia: —</span><button id="motion-permission" hidden>Activar Motion</button></header><main class="pad"><section class="shoulders"><div class="trigger" data-trigger="lt">LT <span>0%</span></div><button data-button="lb">LB</button><button data-button="rb">RB</button><div class="trigger" data-trigger="rt">RT <span>0%</span></div></section><section class="body-pad"><div class="left-pad"><div class="stick" data-stick="leftStick"><div class="knob">L</div></div><button class="stick-click" data-button="l3">L3</button><div class="dpad"><button data-dpad="up">▲</button><div><button data-dpad="left">◀</button><button data-dpad="right">▶</button></div><button data-dpad="down">▼</button></div></div><div class="middle-pad"><button data-button="back">View</button><button data-button="start">Menu</button></div><div class="right-pad"><div class="face"><button data-button="y">Y</button><div><button data-button="x">X</button><button data-button="b">B</button></div><button data-button="a">A</button></div><div class="stick" data-stick="rightStick"><div class="knob">R</div></div><button class="stick-click" data-button="r3">R3</button></div></section></main><div id="motion-status" class="small"></div><script type="module" src="/control.js"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>JoyLinkea-2 · Control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="controller-page" data-type="complete" data-priority="dpad">
+  <div class="controller-shell">
+    <header class="controller-topbar">
+      <strong>JoyLinkea-2</strong>
+      <span id="status" role="status">Conectando…</span>
+      <span id="latency">Latencia: —</span>
+      <button id="motion-permission" hidden>Activar Motion</button>
+    </header>
+
+    <div class="controller-preferences" aria-label="Opciones del control">
+      <label>Type
+        <select id="type-select">
+          <option value="simple-analog">Simple Analog</option>
+          <option value="simple-dpad">Simple DPAD</option>
+          <option value="complete">Complete Joystick</option>
+        </select>
+      </label>
+      <label>Triggers
+        <select id="triggers-select">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label id="priority-field">Priority
+        <select id="priority-select">
+          <option value="dpad">DPAD</option>
+          <option value="analog">L Analog</option>
+        </select>
+      </label>
+      <span id="motion-status" class="small"></span>
+    </div>
+
+    <div class="rotate-hint" role="note">↻ Rotate your phone <span>Landscape works best</span></div>
+
+    <main class="pad" aria-label="Gamepad táctil">
+      <section class="shoulders" aria-label="Triggers">
+        <div class="shoulder-group left-shoulders">
+          <button data-button="lb" aria-label="L1, left bumper">L1</button>
+          <div class="trigger" data-trigger="lt" data-trigger-level="2" role="button" aria-label="L2, left trigger">L2 <span>0%</span></div>
+          <button data-button="l3" data-trigger-level="3" aria-label="L3, left stick click">L3</button>
+        </div>
+        <div class="shoulder-center" aria-hidden="true"></div>
+        <div class="shoulder-group right-shoulders">
+          <button data-button="rb" aria-label="R1, right bumper">R1</button>
+          <div class="trigger" data-trigger="rt" data-trigger-level="2" role="button" aria-label="R2, right trigger">R2 <span>0%</span></div>
+          <button data-button="r3" data-trigger-level="3" aria-label="R3, right stick click">R3</button>
+        </div>
+      </section>
+
+      <section class="play-area" aria-label="Controles principales">
+        <div class="dpad" aria-label="DPAD">
+          <button data-dpad="up" aria-label="DPAD up">▲</button>
+          <button data-dpad="left" aria-label="DPAD left">◀</button>
+          <button data-dpad="right" aria-label="DPAD right">▶</button>
+          <button data-dpad="down" aria-label="DPAD down">▼</button>
+        </div>
+
+        <div class="stick left-stick" data-stick="leftStick" role="group" aria-label="L Analog">
+          <div class="knob">L</div>
+        </div>
+
+        <div class="center-actions">
+          <button data-button="back">Select</button>
+          <button data-button="start">Start</button>
+        </div>
+
+        <div class="face" aria-label="Botones ABXY">
+          <button data-button="y" aria-label="Y">Y</button>
+          <button data-button="x" aria-label="X">X</button>
+          <button data-button="b" aria-label="B">B</button>
+          <button data-button="a" aria-label="A">A</button>
+        </div>
+
+        <div class="stick right-stick" data-stick="rightStick" role="group" aria-label="R Analog">
+          <div class="knob">R</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="/control.js"></script>
+</body>
+</html>

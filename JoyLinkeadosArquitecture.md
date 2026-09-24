@@ -840,59 +840,55 @@ Control layout
 El estado lógico A/B/X/Y, sticks, etc. no debe depender de coordenadas
 CSS.
 
-Deben existir layouts visuales:
-
-``` text
-Landscape
-Portrait
-```
-
-que escriben sobre el mismo `GamepadState`.
+Existe un único layout horizontal con tres disposiciones de controles
+(`Simple Analog`, `Simple DPAD`, `Complete Joystick`) que escriben sobre
+el mismo `GamepadState`. Los dropdowns Type/Triggers/Priority y sus
+valores persisten solo en `localStorage`; no cambian sesión, IPC ni
+protocolo. Antes de ocultar controles se envía un snapshot neutral y se
+liberan las capturas de puntero activas. Los snapshots de release forzado
+no se omiten por backpressure.
 
 ------------------------------------------------------------------------
 
 # 25. Landscape
 
-Debe ser el layout prioritario para experiencia tipo control físico.
+Es la disposición normal tipo gamepad físico.
 
 Conceptualmente:
 
 ``` text
 ┌────────────────────────────────────┐
-│ LT LB                        RB RT │
+│ L1 L2 L3                R1 R2 R3   │
 │                                    │
-│   LS        D-PAD      Y            │
-│                       X B           │
-│                        A        RS  │
+│  D-PAD   SELECT START    Y          │
+│                         X B         │
+│  L ANALOG               A   R ANALOG│
 │                                    │
-│          BACK   START              │
 └────────────────────────────────────┘
 ```
 
-El diseño visual definitivo se realizará posteriormente.
+En Complete, Priority intercambia D-pad y L Analog entre las posiciones
+izquierdas media/inferior; R Analog permanece abajo a la derecha. Simple
+Analog y Simple DPAD muestran solo su control principal izquierdo,
+Select/Start y ABXY. Triggers determina qué L1/L2/L3 y R1/R2/R3 se ven.
+CSS escala controles según viewport/safe areas para evitar scroll.
 
 ------------------------------------------------------------------------
 
 # 26. Portrait
 
-Debe reorganizar controles sin cambiar semántica.
-
-Evitar intentar simplemente escalar el layout landscape hasta volverlo
-inutilizable.
+No tiene layout vertical independiente. Conserva la composición
+horizontal escalada y muestra **Rotate your phone** sobre el control.
+La orientación no modifica credenciales, slot ni controllerId; puede
+neutralizar el input táctil local durante el giro sin reconectar.
 
 ------------------------------------------------------------------------
 
 # 27. L3/R3
 
-Los sticks deben soportar simultáneamente:
-
--   movimiento;
--   botón L3/R3.
-
-La UI debe evitar que intentar presionar L3/R3 genere movimientos
-extremos involuntarios.
-
-La solución UX concreta puede evolucionar durante pruebas.
+El movimiento de sticks y los botones L3/R3 son capacidades distintas de
+`GamepadState`. L3/R3 se muestran en la franja superior solo con
+Triggers = 3; esto evita un click involuntario al mover el stick.
 
 ------------------------------------------------------------------------
 
@@ -2193,13 +2189,13 @@ irrelevantes cuando sea posible.
 
 ------------------------------------------------------------------------
 
-# 77. QR futuro cercano
+# 77. QR e Invite LAN
 
-El QR simplemente codifica la URL LAN.
-
-No introducir un servicio cloud para generarlo.
-
-Puede generarse localmente.
+El Host genera localmente un SVG QR por URL LAN `/control`. La ruta
+`/control-qr.svg?index=n` toma la URL de la misma lista de interfaces
+que comunica `HOST_INFO`; el índice inválido devuelve 404. Invite copia
+exactamente esa URL mediante clipboard del navegador y muestra feedback.
+No se agrega servicio cloud, relay ni invitación Online.
 
 ------------------------------------------------------------------------
 

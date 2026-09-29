@@ -18,7 +18,7 @@ La arquitectura está diseñada inicialmente para:
 
 -   Windows como Host.
 -   Clientes web móviles.
--   Comunicación LAN y, de forma opcional, Online mediante relay.
+-   Comunicación LAN y, de forma opcional, Online directo mediante UPnP.
 -   Un gamepad virtual por cliente.
 -   Baja latencia.
 -   Reconexión segura.
@@ -40,7 +40,7 @@ Browser móvil
     ↓
 Cliente Web
     ↓
-WebSocket LAN o túnel Online
+WebSocket LAN o Online directo
     ↓
 Servidor Host
     ↓
@@ -87,7 +87,7 @@ Motivos:
 -   fácil distribución de archivos web;
 -   adecuado para manejar múltiples clientes;
 -   permite mantener cliente y servidor en un ecosistema simple;
--   permite un relay/túnel Online separado del núcleo;
+-   permite publicar un puerto Online sin alterar el núcleo;
 -   no necesita encargarse directamente de APIs nativas complejas de
     Windows.
 
@@ -1900,31 +1900,22 @@ Luego robustecerlo.
 
 ------------------------------------------------------------------------
 
-# 64. Online
-
-La arquitectura debe permitir:
+# 64. Online directo
 
 ``` text
-LAN:
-Browser
-→ Node Host
-
-ONLINE:
-Browser
-→ Relay/Gateway
-→ Node Host
+LAN: Browser → LAN → Node Host (puerto 5182)
+ONLINE: Browser remoto → Internet → mapping UPnP del router
+        → Node Host (listener Online, puerto 5183)
 ```
 
-El Host abre un túnel WebSocket saliente `wss://<relay>/tunnel`. El relay
-solo reenvía `/j/<token>/control`, sus assets y `/j/<token>/ws`; no
-publica Host UI, API de administración, Named Pipe ni Bridge. El token
-aleatorio de 32 bytes se valida en el relay antes de aceptar conexiones
-y nuevamente en el Host antes de abrir el WebSocket local `/ws`.
-El relay conserva el mapeo token→túnel mientras el Host está conectado.
-El Host revoca explícitamente al cerrar Online. Si cae el túnel, se
-cierran los sockets locales y Core neutraliza sus sesiones; heartbeat,
-input timeout y gracia siguen siendo los de LAN. No hay segunda
-implementación de GamepadState.
+Ambos listeners viven en el mismo proceso Node y entregan WebSockets al
+mismo Core. El listener LAN conserva su comportamiento; el Online solo
+sirve Controller HTML/CSS/JS y `/ws`. El puerto Online requiere token
+criptográfico válido antes de mostrar `/control` o aceptar `/ws`, sin
+inferir autoridad por IP de origen. No expone Host UI, administración,
+health, Named Pipe ni Bridge. El WebSocket Online queda marcado para que
+al revocar se cierre y Core neutralice el input; heartbeat, input timeout,
+gracia, secuencias y RTT son comunes con LAN.
 
 Todo lo posterior permanece:
 
@@ -1942,12 +1933,12 @@ Por eso Network Layer no debe estar mezclado con Controller Manager.
 
 # 65. Invitaciones Online
 
-Cada activación genera un token criptográfico nuevo. La URL anterior
-deja de aceptar conexiones al revocar. El token autoriza solamente la
-conexión Controller a través del relay; el Host continúa asignando
-`session→slot→controller`. La URL se muestra en Host QR e Invite solo
-cuando el relay confirma disponibilidad. La UI de administración y sus
-acciones permanecen limitadas a loopback.
+Cada activación genera un token criptográfico nuevo de 32 bytes. La URL
+anterior deja de aceptar conexiones al revocar. El token autoriza
+solamente el Controller del listener Online; el Host asigna
+`session→slot→controller`. La URL se muestra en QR e Invite solo tras
+confirmar mapping UPnP e IPv4 WAN pública. La UI de administración y
+sus acciones permanecen limitadas a loopback.
 
 No hardcodear:
 
@@ -1959,20 +1950,22 @@ Una IP jamás debe ser la identidad de un jugador.
 
 ------------------------------------------------------------------------
 
-# 66. Relay desplegable
+# 66. UPnP y lifecycle
 
-`relay/server.js` es un proceso Node independiente. Requiere una URL
-pública HTTPS y reverse proxy con WebSocket/TLS, y `relayUrl` (WSS) más
-`publicBaseUrl` en la configuración del Host. Se recomienda un relay
-dedicado a JoyLinkea; no se guardan credenciales en el repositorio.
-El túnel usa mensajes JSON con IDs para HTTP y WebSocket; las rutas
-públicas son una allowlist. Ping/pong detecta la pérdida del túnel y el
-backpressure excesivo lo cierra para no acumular estados viejos.
+`src/online.js` adapta el patrón IGD de UYC: SSDP descubre el router,
+SOAP crea un mapping TCP temporal y `GetExternalIPAddress` obtiene la
+WAN. Se rechaza una IPv4 WAN privada/CGNAT; no se promete que la ruta
+externa esté verificada sin una prueba desde otra red. El mapping usa
+lease de 30 minutos y se renueva mientras Online sigue activo.
 
-UYC sirvió de referencia para token, activación/revocación, estado de
-Host y control local de administración. Su transporte real era UPnP y
-puerto entrante, por lo que no se trasladó a JoyLinkea: no satisface el
-requisito de NAT/CGNAT sin port forwarding.
+Al volver a LAN o cerrar JoyLinkea se invalida el token primero, se
+cierran los clientes Online y se consulta `GetSpecificPortMappingEntry`
+antes de eliminar el mapping. Solo se llama `DeletePortMapping` cuando
+IP interna, puerto y descripción coinciden exactamente con los creados
+por JoyLinkea. Una falla de verificación se informa; no se borra un
+mapping ambiguo. Si falla UPnP, la WAN es privada o la renovación falla,
+Online se desactiva de forma segura; LAN permanece disponible. No hay
+relay, dominio ni dependencia de infraestructura central.
 
 ------------------------------------------------------------------------
 
@@ -2038,7 +2031,7 @@ Solo diagnóstico; no necesita telemetría externa.
 
 # 70. Privacidad
 
-LAN debe funcionar completamente local, aun sin Internet ni relay.
+LAN debe funcionar completamente local, aun sin Internet.
 
 En modo LAN no enviar:
 
@@ -2050,9 +2043,11 @@ En modo LAN no enviar:
 
 a servidores externos.
 
-En modo Online, el relay transporta la página Controller, token y
-mensajes de input/sesión. No recibe comandos nativos ni información del
-juego. Los operadores deben evitar registrar URLs completas con token.
+En modo Online, los clientes envían página Controller, token y mensajes
+de input/sesión directamente al Host. No se transmiten comandos nativos
+ni información del juego a un servicio central. El token no debe
+registrarse en logs; `Referrer-Policy: no-referrer` evita enviarlo como
+referencia al navegar fuera del Controller.
 
 ------------------------------------------------------------------------
 

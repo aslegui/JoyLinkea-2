@@ -7,13 +7,13 @@ import {validateGamepadState} from '../src/gamepad.js';
 const html=readFileSync(new URL('../public/control.html',import.meta.url),'utf8');
 const script=readFileSync(new URL('../public/control.js',import.meta.url),'utf8');
 
-function setup(savedPreferences){
-  const dom=new JSDOM(html,{url:'http://localhost/control',runScripts:'outside-only'});
+function setup(savedPreferences,url='http://localhost/control'){
+  const dom=new JSDOM(html,{url,runScripts:'outside-only'});
   const {window}=dom;
   if(savedPreferences)window.localStorage.setItem('joylinkea2.controller.preferences.v1',JSON.stringify(savedPreferences));
   class FakeWebSocket{
     static instances=[];
-    constructor(){this.readyState=1;this.bufferedAmount=0;this.sent=[];FakeWebSocket.instances.push(this)}
+    constructor(url){this.url=url;this.readyState=1;this.bufferedAmount=0;this.sent=[];FakeWebSocket.instances.push(this)}
     send(raw){this.sent.push(JSON.parse(raw))}
   }
   window.WebSocket=FakeWebSocket;
@@ -147,7 +147,7 @@ test('Host conmuta QR e Invite Online sin filtrar la URL LAN',async()=>{
   window.WebSocket=FakeWebSocket;
   try{
     window.eval(hostScript);
-    const lan='http://192.168.1.39:5182/control',remote='https://relay.example/j/opaque-token/control';
+    const lan='http://192.168.1.39:5182/control',remote='http://8.8.8.8:45555/control?token=opaque-token';
     FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_INFO',mode:'fake',port:5182,urls:[lan],online:{mode:'LAN',state:'Offline',url:''}})});
     FakeWebSocket.instance.onmessage({data:JSON.stringify({type:'HOST_ONLINE',online:{mode:'Online',state:'Connecting',url:''}})});
     assert.equal(window.document.querySelector('.invite-card'),null);
@@ -160,4 +160,10 @@ test('Host conmuta QR e Invite Online sin filtrar la URL LAN',async()=>{
     assert.equal(window.document.querySelector('.invite-card a').href,lan);
     window.document.querySelector('.invite-card button').click();await new Promise(resolve=>setImmediate(resolve));assert.equal(copied,lan);
   }finally{dom.window.close()}
+});
+
+test('Controller directo lleva el token Online al WebSocket y LAN sigue sin token',()=>{
+  const online=setup(null,'http://8.8.8.8:45555/control?token=abc123');
+  try{assert.equal(online.FakeWebSocket.instances[0].url,'ws://8.8.8.8:45555/ws?token=abc123')}finally{online.dom.window.close()}
+  const lan=setup();try{assert.equal(lan.FakeWebSocket.instances[0].url,'ws://localhost/ws')}finally{lan.dom.window.close()}
 });

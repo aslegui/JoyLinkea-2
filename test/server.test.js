@@ -16,7 +16,7 @@ async function receive(ws,type,timeout=2000){
 async function opened(ws){await new Promise((resolve,reject)=>{ws.once('open',resolve);ws.once('error',reject)})}
 
 test('Host LAN: dos clientes, QR local, RTT, reconexión y aislamiento',async()=>{
-  const p=spawn(process.execPath,['src/server.js'],{env:{...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_BRIDGE_MODE:'fake'},stdio:['ignore','pipe','pipe'],windowsHide:true});
+  const p=spawn(process.execPath,['src/server.js'],{env:{...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_TEST_ONLINE_PORT:'0',JOYLINKEA_BRIDGE_MODE:'fake'},stdio:['ignore','pipe','pipe'],windowsHide:true});
   let output='';p.stdout.on('data',data=>output+=data);p.stderr.on('data',data=>output+=data);
   let a,b,host,recovered;
   try{

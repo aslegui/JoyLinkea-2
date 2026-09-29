@@ -22,7 +22,7 @@ assert.equal(initial.slots[0].lt,0);
 assert.equal(initial.slots[0].rt,0);
 assert(Math.abs(initial.slots[0].lx)<=1&&Math.abs(initial.slots[0].ly)<=1&&Math.abs(initial.slots[0].rx)<=1&&Math.abs(initial.slots[0].ry)<=1);
 console.log('BASELINE',JSON.stringify(initial));
-const host=spawn(process.execPath,['src/server.js'],{env:{...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_TEST_BIND:'127.0.0.1',JOYLINKEA_BRIDGE_MODE:'native',JOYLINKEA_NATIVE_TIMING:'1'},stdio:['ignore','pipe','pipe'],windowsHide:true});
+const host=spawn(process.execPath,['src/server.js'],{env:{...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_TEST_ONLINE_PORT:'0',JOYLINKEA_TEST_BIND:'127.0.0.1',JOYLINKEA_BRIDGE_MODE:'native',JOYLINKEA_NATIVE_TIMING:'1'},stdio:['ignore','pipe','pipe'],windowsHide:true});
 let output='';host.stdout.on('data',data=>output+=data);host.stderr.on('data',data=>output+=data);
 let ws,sendTimer;
 try{

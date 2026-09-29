@@ -10,17 +10,16 @@ La UI Host solo recibe WebSocket desde loopback. El selector **LAN / Online** em
 
 El Controller usa un solo layout horizontal. En portrait muestra **Rotate your phone**; girar no cambia sesión ni slot. Arriba están **Type** (`Simple Analog`, `Simple DPAD`, `Complete Joystick`) y **Triggers** (1/2/3); en Complete aparece **Priority** (`DPAD` o `L Analog`). Las preferencias se guardan en ese navegador. Cambiar una opción neutraliza el input táctil anterior sin recrear el gamepad.
 
-## Online
+## Online directo
 
-Online requiere desplegar el [relay propio](relay/README.md) en un servidor público con DNS, HTTPS y WebSocket. El Host mantiene una conexión saliente; no requiere port forwarding y puede funcionar detrás de NAT/CGNAT si alcanza el relay. Configurar `online.relayUrl` y `online.publicBaseUrl` en `config/local.json` o `JOYLINKEA_RELAY_URL` y `JOYLINKEA_PUBLIC_BASE_URL`. Sin estas URLs, el selector Online muestra Error y LAN sigue operativo. No hay un dominio ni relay desplegado por defecto.
+Seleccionar **Online** hace que JoyLinkea descubra el router por UPnP, publique temporalmente su listener Online y muestre `http://<IP-pública>:<puerto>/control?token=<token>`. QR e Invite comparten esa URL. No requiere relay, dominio, VPS, cuenta, JSON ni port forwarding manual. LAN conserva el puerto 5182; Online usa internamente el puerto 5183 para exigir token a todos los clientes que llegan por Internet. Ambos entran al mismo Core y backend XInput. Al volver a LAN se revoca el token, se neutralizan los clientes Online y se retira únicamente el mapping UPnP verificado como propio.
 
-Con el relay configurado, elegir **Online** en la UI Host, esperar estado **Online** y compartir el QR o **Invite**. Ambos contienen la misma URL HTTPS con token aleatorio. El invitado abre esa URL desde otra red y usa el mismo Controller, sesión, input y backend XInput que LAN. Volver a LAN revoca la invitación y desconecta/neutraliza los clientes Online. LAN puede permanecer disponible localmente mientras el selector está en Online. El enlace es una credencial: compartirlo solo con quienes deban controlar el juego.
+Para recibir conexiones de Internet, Windows debe permitir el puerto Online en perfil privado. La regla propia se instala una vez con `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup-LAN.ps1 -InstallOnlineFirewall` desde PowerShell elevado. El instalador futuro hará este paso. La guía de primera prueba y diagnóstico está en [Online directo](docs/ONLINE-DIRECT-MANUAL.md).
 
-La implementación de referencia de UYC examinada usaba UPnP y puerto entrante; se adaptaron su gestión de token, estado y revocación. Para cumplir el requisito de NAT/CGNAT de JoyLinkea se implementó un túnel saliente y relay propio. No hay dependencia runtime de UYC.
-
+**Límite aceptado:** CGNAT, doble NAT, UPnP desactivado/no disponible o firewall pueden impedir Online. Un mapping UPnP y una IP WAN pública no verifican por sí solos el acceso real; probar desde datos móviles. La URL HTTP carece de cifrado TLS público sin dominio: el token es una credencial bearer y el tráfico no va cifrado. Compartir la invitación solo con los jugadores autorizados. JoyLinkea Online transporta inputs, no video/audio.
 ## Red y Setup
 
-Comprobar perfil y regla: `powershell -File scripts/Setup-LAN.ps1 -Check`. Para instalar **solo** la regla propia `JoyLinkea-2 LAN` en red privada, ejecutar `powershell -File scripts/Setup-LAN.ps1 -InstallFirewall` en PowerShell elevado. No modifica reglas ajenas. Si el cliente no accede: comprobar IP, perfil de red privada, aislamiento de clientes Wi-Fi, VPN y firewall. El Bridge no abre puertos.
+Comprobar perfil y regla: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup-LAN.ps1 -Check`. Para instalar **solo** la regla propia `JoyLinkea-2 LAN` en red privada, ejecutar `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup-LAN.ps1 -InstallFirewall` en PowerShell elevado. No modifica reglas ajenas. Si el cliente no accede: comprobar IP, perfil de red privada, aislamiento de clientes Wi-Fi, VPN y firewall. El Bridge no abre puertos.
 
 ## Validación
 
@@ -34,5 +33,5 @@ Smoke manual pendiente: iniciar Host Native; escanear QR desde un celular de la 
 - `CreateController` exige administrador durante el runtime. Node sigue sin elevación; Controller Host y Safety Watchdog se elevan. No hay `.exe` empaquetado.
 - XInput ofrece cuatro índices compartidos con controles físicos. En esta PC el índice 0 ya estaba ocupado; se comprobaron tres virtuales, no cuatro.
 - Motion depende de navegador, permisos y contexto seguro; HTTP por IP LAN puede impedir acceso a sensores en algunos navegadores.
-- Online transporta solo inputs, sin video/audio/streaming. El relay público aún necesita deployment y prueba desde otra red real; el test automatizado usa relay local y Fake.
+- Online directo depende de router UPnP, IPv4 WAN pública y regla de firewall propia; la prueba entre redes reales sigue pendiente. No hay relay ni streaming.
 - En Windows 10 19045, el cleanup oficial de HIDMaestro 1.9.0 devolvió éxito pero no retiró INF/certificado por la incompatibilidad de `pnputil /enum-drivers /format xml` y la ausencia de borrado del certificado en su implementación; ver el checkpoint.

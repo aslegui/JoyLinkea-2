@@ -1203,11 +1203,12 @@ la primera versión.
 ## 29. Online
 
 El Host permite elegir **LAN** (predeterminado) u **Online**. LAN conserva
-la URL `http://<LAN-IP>:<port>/control`, QR local e Invite. Online
-requiere un relay público desplegado y configurado; el Host mantiene un
-túnel saliente y no necesita port forwarding. Un invitado externo abre
-la URL HTTPS con token aleatorio y obtiene el mismo Controller y pipeline
-de sesiones, input, Controller Host y XInput que en LAN.
+la URL `http://<LAN-IP>:<port>/control`, QR local e Invite. En Online,
+la propia PC publica temporalmente un puerto mediante UPnP en su router
+y ofrece `http://<IP-pública>:<puerto>/control?token=<token>`. No se
+requiere relay, dominio, cuenta, VPS ni servidor central de JoyLinkea.
+El invitado utiliza el mismo Controller y pipeline de sesiones, input,
+Controller Host y XInput que en LAN.
 
 Al activar Online se crea una invitación nueva. QR e Invite muestran
 exclusivamente la URL del modo seleccionado. Al desactivar Online, el
@@ -1242,12 +1243,16 @@ Las invitaciones online deberían ser:
 -   limitadas a autoridad de Controller, sin endpoints de Host;
 -   regeneradas en cada nueva activación.
 
-### 29.2 Relay
+### 29.2 Hosting directo
 
-El relay transporta exclusivamente la página Controller y su WebSocket.
-Opera por conexión saliente del Host y funciona detrás de NAT/CGNAT
-cuando el Host alcanza el relay público. Requiere DNS/TLS y deployment
-externo; no proporciona video, audio ni streaming.
+El Host intenta descubrir el router, crear un mapping UPnP temporal y
+obtener su IPv4 WAN. Si la IP no es pública, el router no soporta UPnP
+o el mapping falla, Online muestra un error comprensible y LAN sigue
+funcionando. **CGNAT y routers sin UPnP son límites aceptados de V1.**
+No se agrega un relay para resolverlos. La URL es HTTP porque no hay
+dominio/certificado público; el token es una credencial bearer y solo
+autoriza el Controller. La UI de Host y comandos administrativos no se
+publican. Online no proporciona video, audio ni streaming.
 
 Esto debe poder agregarse sin modificar el concepto central:
 
@@ -1345,7 +1350,7 @@ pertenece a una fase posterior.
 
 Especialmente durante V1 deben evitarse:
 
--   servicios adicionales Online fuera del relay de Controller;
+-   servicios centrales Online o relay;
 -   integraciones específicas con juegos;
 -   streaming;
 -   sistemas de cuentas;

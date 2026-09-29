@@ -32,7 +32,7 @@ function showInvites(controlUrls){
 
 function renderAccess(){
   for(const radio of document.querySelectorAll('[name=access-mode]'))radio.checked=radio.value===online.mode;
-  onlineStatus.textContent=online.mode==='LAN'?'Offline':online.state+(online.error?` · ${online.error}`:'');
+  onlineStatus.textContent=online.state==='Error'?`Error · ${online.error}`:online.mode==='LAN'?'Offline':online.state;
   explanation.textContent=online.mode==='LAN'?'Escaneá el QR o compartí la URL LAN con Invite. El celular debe estar en la misma red.':'Compartí la invitación Online. El link da acceso solo al Controller y vence al desactivar Online.';
   if(online.mode==='LAN'){showInvites(lanUrls);return}
   if(online.state!=='Online'||!online.url){urls.textContent=online.state==='Error'?online.error:'Connecting...';return}

@@ -18,7 +18,7 @@ const initial=probe();
 assert.equal(initial.pnpHidMaestroPresent,false,'HIDMaestro residual before test');
 const baseline=initial.slots.filter(s=>s.connected).map(s=>s.index);
 console.log('BASELINE XInput',baseline);
-const hostEnv={...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_TEST_BIND:'127.0.0.1'};
+const hostEnv={...process.env,JOYLINKEA_TEST_PORT:'0',JOYLINKEA_TEST_ONLINE_PORT:'0',JOYLINKEA_TEST_BIND:'127.0.0.1'};
 delete hostEnv.JOYLINKEA_BRIDGE_MODE;
 const host=spawn(process.execPath,['src/server.js'],{env:hostEnv,stdio:['ignore','pipe','pipe'],windowsHide:true});
 let output='';host.stdout.on('data',data=>output+=data);host.stderr.on('data',data=>output+=data);
